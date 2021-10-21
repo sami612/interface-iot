@@ -1,47 +1,51 @@
 <script lang="ts">
 	import type { DailyData } from '$lib/daily-data';
 	import Chart from '$components/chart.svelte';
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { Client } from '@jdiamond/mqtt-browser';
 	import { Buffer } from 'buffer';
 
-	let temperatureLive: { x: any[]; y: number[] } = {
+	type LiveData = { x: any[]; y: number[] };
+
+	let temperatureLive: LiveData = {
 		x: [],
 		y: []
 	};
 	let temperatureDay: DailyData[] = [];
-	let humidityLive: { x: any[]; y: number[] } = {
+	let humidityLive: LiveData = {
 		x: [],
 		y: []
 	};
 	let humidityDay: DailyData[] = [];
-	let accelerationLive: { x: any[]; y: number[] } = {
+	let accelerationLive: LiveData = {
 		x: [],
 		y: []
 	};
 	let accelerationDay: DailyData[] = [];
-	let loggerStatus: string;
+	let mqttStatus: string;
 
 	const client = new Client({
-		//url: 'ws://192.168.42.231:8000/mqtt', // 4g
-		url: 'ws://172.16.162.53:8000/mqtt', // school
+		url: 'ws://192.168.42.231:8000/mqtt', // 4g
+		// url: 'ws://172.16.162.53:8000/mqtt', // school
 		clientId: `web_${Math.random() * 100}`,
 		connectTimeout: 2000,
 		reconnect: {
 			retries: 3
 		},
 		logger: (msg) => {
-			loggerStatus = msg;
 			console.log(msg);
 		}
 	});
 
 	onMount(async () => {
 		await client.connect();
+		mqttStatus = 'Connected.';
 		await client.subscribe('ilkem/#', 2);
+		mqttStatus = 'Subscribed.';
 
 		client.on('message', (topic: string, message: Buffer) => {
 			let payload = Buffer.from(message).toString('utf-8');
+			mqttStatus = `Received from '${topic}': ${payload}`;
 			let parsed: any;
 			switch (topic) {
 				case 'ilkem/temperature':
@@ -58,6 +62,7 @@
 					break;
 
 				case 'ilkem/temperature/day':
+					temperatureDay = JSON.parse(payload);
 					break;
 
 				case 'ilkem/temperature/warn':
@@ -80,6 +85,7 @@
 					break;
 
 				case 'ilkem/humidity/day':
+					humidityDay = JSON.parse(payload);
 					break;
 
 				case 'ilkem/acceleration':
@@ -96,36 +102,52 @@
 					break;
 
 				case 'ilkem/acceleration/day':
+					accelerationDay = JSON.parse(payload);
 					break;
 			}
 		});
 	});
 
 	let dayQuery: string;
-	function onSubmit() {
-		client.publish('ilkem/search/day', dayQuery);
+	function onSubmit(query: string) {
+		client.publish('ilkem/search/day', query);
 	}
+	$: onSubmit(dayQuery);
+
+	function onDisarm() {
+		client.publish('ilkem/disarm', '{}');
+	}
+
+	onDestroy(() => {
+		client.disconnect();
+	});
 </script>
 
 <section class="hero is-success is-fullheight">
 	<p class="title p-4">Mosquitto Websockets</p>
 	<div class="container">
 		Subscribed to
-		<input class="input" id="topic" disabled type="text" /> Status:
-		<input class="input" id="status" size="80" disabled type="text" bind:value={loggerStatus} />
+		<input class="input" id="topic" disabled type="text" value="ilkem/#" /> Status:
+		<input
+			class="input"
+			id="status"
+			style="text-overflow: ellipsis;"
+			size="80"
+			disabled
+			type="text"
+			bind:value={mqttStatus}
+		/>
 	</div>
 
-	<!-- TODO: Flip switch led -->
-
 	<div class="container">
-		<form on:submit|preventDefault={onSubmit}>
+		<form on:submit|preventDefault={() => onSubmit(dayQuery)}>
 			<label class="label" for="name">Date recherchée</label>
 			<div class="field has-addons">
 				<div class="control">
 					<input
 						class="input"
 						bind:value={dayQuery}
-						type="text"
+						type="date"
 						name="name"
 						placeholder="yyyy-MM-dd"
 					/>
@@ -138,39 +160,64 @@
 	</div>
 
 	<div class="container">
-		<img src="assets/goutte.png" width="18px" height="27px" alt="Goutte" />
-		<input type="checkbox" class="flipswitch" id="humidite" name="humidite" />
-		<label for="humidite"> Humidité &emsp;</label>
-
-		<img src="assets/thermometre.png" width="12px" height="30px" alt="Thermometre" />
-		<input type="checkbox" class="flipswitch" id="temperature" name="temperature" />
-		<label for="temperature"> Temperature </label>
+		<button class="button is-danger" on:click={onDisarm}>Réarmer</button>
 	</div>
 </section>
-<section class="hero is-primary is-medium">
-	<Chart
-		title="Relevé de température"
-		xLabel="Temps (s)"
-		yLabel="Température (°C)"
-		bind:yData={temperatureLive.y}
-		bind:xData={temperatureLive.x}
-	/>
-</section>
-<section class="hero is-success is-medium">
-	<Chart
-		title="Relevé d'humidité"
-		xLabel="Temps (s)"
-		yLabel="Humidité (%)"
-		bind:xData={humidityLive.x}
-		bind:yData={humidityLive.y}
-	/>
-</section>
-<section class="hero is-info is-medium">
-	<Chart
-		title="Relevé d'accélération"
-		xLabel="Temps (s)"
-		yLabel="Accélération sur l'axe x du capteur cm/s²"
-		bind:xData={accelerationLive.x}
-		bind:yData={accelerationLive.y}
-	/>
-</section>
+
+{#if !dayQuery}
+	<section class="hero is-primary is-medium">
+		<Chart
+			title="Relevé de température"
+			xLabel="Temps (s)"
+			yLabel="Température (°C)"
+			bind:yData={temperatureLive.y}
+			bind:xData={temperatureLive.x}
+		/>
+	</section>
+	<section class="hero is-success is-medium">
+		<Chart
+			title="Relevé d'humidité"
+			xLabel="Temps (s)"
+			yLabel="Humidité (%)"
+			bind:xData={humidityLive.x}
+			bind:yData={humidityLive.y}
+		/>
+	</section>
+	<section class="hero is-info is-medium">
+		<Chart
+			title="Relevé d'accélération"
+			xLabel="Temps (s)"
+			yLabel="Accélération sur l'axe x du capteur cm/s²"
+			bind:xData={accelerationLive.x}
+			bind:yData={accelerationLive.y}
+		/>
+	</section>
+{:else}
+	<section class="hero is-primary is-medium">
+		<Chart
+			title="Relevé de température du jour {dayQuery}"
+			xLabel="Temps (s)"
+			yLabel="Température (°C)"
+			yData={temperatureDay.map((dailyData) => dailyData.value)}
+			xData={temperatureDay.map((dailyData) => dailyData.time)}
+		/>
+	</section>
+	<section class="hero is-success is-medium">
+		<Chart
+			title="Relevé d'humidité du jour {dayQuery}"
+			xLabel="Temps (s)"
+			yLabel="Humidité (%)"
+			xData={humidityDay.map((dailyData) => dailyData.time)}
+			yData={humidityDay.map((dailyData) => dailyData.value)}
+		/>
+	</section>
+	<section class="hero is-info is-medium">
+		<Chart
+			title="Relevé d'accélération du jour {dayQuery}"
+			xLabel="Temps (s)"
+			yLabel="Accélération sur l'axe x du capteur cm/s²"
+			xData={accelerationDay.map((dailyData) => dailyData.time)}
+			yData={accelerationDay.map((dailyData) => dailyData.value)}
+		/>
+	</section>
+{/if}

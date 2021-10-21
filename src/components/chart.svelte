@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
-	import Chart from 'chart.js/auto';
+	import { Chart, registerables } from 'chart.js';
 
 	export let title: string;
 	export let xLabel: string;
@@ -11,7 +11,15 @@
 	let chart: Chart;
 	let chartEl: HTMLElement;
 
+	$: updateTitle(title);
 	$: updateGraph(xData, yData);
+
+	function updateTitle(title: string) {
+		if (chart?.data?.datasets[0]) {
+			chart.data.datasets[0].label = title;
+			chart.update();
+		}
+	}
 
 	function updateGraph(newXData: any[], newYData: number[]) {
 		if (chart?.data?.datasets[0]) {
@@ -21,8 +29,8 @@
 		}
 	}
 
-	// TODO: use chart.js
 	onMount(async () => {
+		Chart.register(...registerables);
 		chart = new Chart(chartEl, {
 			type: 'line',
 			data: {
