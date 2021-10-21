@@ -6,6 +6,17 @@
 	import Mqtt from '$lib/mqtt';
 
 	type LiveData = { x: any[]; y: number[] };
+	const topics = [
+		'ilkem/temperature',
+		'ilkem/humidity',
+		'ilkem/acceleration',
+		'ilkem/temperature/day',
+		'ilkem/humidity/day',
+		'ilkem/acceleration/day',
+		'ilkem/temperature/warn',
+		'ilkem/humidity/warn',
+		'ilkem/acceleration/warn'
+	];
 
 	// Live data. These arrays will increase each second.
 	let temperatureLive: LiveData = {
@@ -24,60 +35,56 @@
 	let temperatureDay: DailyData[] = [];
 	let humidityDay: DailyData[] = [];
 	let accelerationDay: DailyData[] = [];
-	let mqttStatus: string;
+	let mqttStatus: string = '';
 
 	// When the page is fully loaded
 	onMount(async () => {
 		await Mqtt.connect();
 		mqttStatus = 'Connected.';
-		await Mqtt.subscribe('ilkem/#', 2); // Subscribe to all topics starting with ilkem/
+		await Promise.all(topics.map((topic) => Mqtt.subscribe(topic)));
 		mqttStatus = 'Subscribed.';
 
 		Mqtt.on('message', (topic: string, message: Buffer) => {
 			let payload = Buffer.from(message).toString('utf-8');
 			mqttStatus = `Received from '${topic}': ${payload}`;
-			let parsed: any;
 			switch (topic) {
 				case 'ilkem/temperature':
-					parsed = parseFloat(payload);
-					// Append parsed to temperature.y
-					temperatureLive.y = [...temperatureLive.y, parsed];
+					// Append payload to temperature.y
+					temperatureLive.y = [...temperatureLive.y, parseFloat(payload)];
 					// Starting with 0, append i+1
 					temperatureLive.x = [
 						...temperatureLive.x,
 						(temperatureLive.x[temperatureLive.x.length - 1] ?? 0) + 1
 					];
-					// Sheft left if there are more than 20 data
+					// Shift left if there are more than 20 data
 					if (temperatureLive.x.length > 20 || temperatureLive.y.length > 20) {
 						temperatureLive.y = temperatureLive.y.splice(1, temperatureLive.y.length);
 						temperatureLive.x = temperatureLive.x.splice(1, temperatureLive.x.length);
 					}
 					break;
 				case 'ilkem/humidity':
-					parsed = parseFloat(payload);
-					// Append parsed to humidity.y
-					humidityLive.y = [...humidityLive.y, parsed];
+					// Append payload to humidity.y
+					humidityLive.y = [...humidityLive.y, parseFloat(payload)];
 					// Starting with 0, append i+1
 					humidityLive.x = [
 						...humidityLive.x,
 						(humidityLive.x[humidityLive.x.length - 1] ?? 0) + 1
 					];
-					// Sheft left if there are more than 20 data
+					// Shift left if there are more than 20 data
 					if (humidityLive.x.length > 20 || humidityLive.y.length > 20) {
 						humidityLive.y = humidityLive.y.splice(1, humidityLive.y.length);
 						humidityLive.x = humidityLive.x.splice(1, humidityLive.x.length);
 					}
 					break;
 				case 'ilkem/acceleration':
-					parsed = parseFloat(payload);
-					// Append parsed to acceleration.y
-					accelerationLive.y = [...accelerationLive.y, parsed];
+					// Append payload to acceleration.y
+					accelerationLive.y = [...accelerationLive.y, parseFloat(payload)];
 					// Starting with 0, append i+1
 					accelerationLive.x = [
 						...accelerationLive.x,
 						(accelerationLive.x[accelerationLive.x.length - 1] ?? 0) + 1
 					];
-					// Sheft left if there are more than 20 data
+					// Shift left if there are more than 20 data
 					if (accelerationLive.x.length > 20 || accelerationLive.y.length > 20) {
 						accelerationLive.y = accelerationLive.y.splice(1, accelerationLive.y.length);
 						accelerationLive.x = accelerationLive.x.splice(1, accelerationLive.x.length);
@@ -103,10 +110,13 @@
 		});
 	});
 
-	let dayQuery: string;
 	async function onSubmit(query: string) {
-		await Mqtt.publish('ilkem/search/day', query);
+		if (query) {
+			await Mqtt.publish('ilkem/search/day', query);
+		}
 	}
+
+	let dayQuery: string;
 	$: onSubmit(dayQuery); // If dayQuery change, onSubmit is automatically executed
 
 	async function onDisarm() {
@@ -125,7 +135,8 @@
 	<p class="title p-4">Mosquitto Websockets</p>
 	<div class="container">
 		Subscribed to
-		<input class="input" id="topic" disabled type="text" value="ilkem/#" /> Status:
+		<input class="input" id="topic" disabled type="text" value={topics.join(', ')} />
+		Status:
 		<input
 			class="input"
 			id="status"
@@ -133,7 +144,7 @@
 			size="80"
 			disabled
 			type="text"
-			bind:value={mqttStatus}
+			value={mqttStatus}
 		/>
 	</div>
 
@@ -168,8 +179,8 @@
 			title="Relevé de température"
 			xLabel="Temps (s)"
 			yLabel="Température (°C)"
-			bind:yData={temperatureLive.y}
-			bind:xData={temperatureLive.x}
+			xData={temperatureLive.x}
+			yData={temperatureLive.y}
 		/>
 	</section>
 	<section class="hero is-success is-medium">
@@ -177,8 +188,8 @@
 			title="Relevé d'humidité"
 			xLabel="Temps (s)"
 			yLabel="Humidité (%)"
-			bind:xData={humidityLive.x}
-			bind:yData={humidityLive.y}
+			xData={humidityLive.x}
+			yData={humidityLive.y}
 		/>
 	</section>
 	<section class="hero is-info is-medium">
@@ -186,8 +197,8 @@
 			title="Relevé d'accélération"
 			xLabel="Temps (s)"
 			yLabel="Accélération sur l'axe x du capteur cm/s²"
-			bind:xData={accelerationLive.x}
-			bind:yData={accelerationLive.y}
+			xData={accelerationLive.x}
+			yData={accelerationLive.y}
 		/>
 	</section>
 {:else}
@@ -213,7 +224,7 @@
 		<Chart
 			title="Relevé d'accélération du jour {dayQuery}"
 			xLabel="Temps (s)"
-			yLabel="Accélération sur l'axe x du capteur cm/s²"
+			yLabel="Accélération sur l'axe x du capteur (cm/s²)"
 			xData={accelerationDay.map((dailyData) => dailyData.time)}
 			yData={accelerationDay.map((dailyData) => dailyData.value)}
 		/>
