@@ -7,27 +7,30 @@
 
 	type LiveData = { x: any[]; y: number[] };
 
+	// Live data. These arrays will increase each second.
 	let temperatureLive: LiveData = {
 		x: [],
 		y: []
 	};
-	let temperatureDay: DailyData[] = [];
 	let humidityLive: LiveData = {
 		x: [],
 		y: []
 	};
-	let humidityDay: DailyData[] = [];
 	let accelerationLive: LiveData = {
 		x: [],
 		y: []
 	};
+	// Daily datas will be filled on request by the user
+	let temperatureDay: DailyData[] = [];
+	let humidityDay: DailyData[] = [];
 	let accelerationDay: DailyData[] = [];
 	let mqttStatus: string;
 
+	// When the page is fully loaded
 	onMount(async () => {
 		await Mqtt.connect();
 		mqttStatus = 'Connected.';
-		await Mqtt.subscribe('ilkem/#', 2);
+		await Mqtt.subscribe('ilkem/#', 2); // Subscribe to all topics starting with ilkem/
 		mqttStatus = 'Subscribed.';
 
 		Mqtt.on('message', (topic: string, message: Buffer) => {
@@ -37,19 +40,48 @@
 			switch (topic) {
 				case 'ilkem/temperature':
 					parsed = parseFloat(payload);
+					// Append parsed to temperature.y
 					temperatureLive.y = [...temperatureLive.y, parsed];
+					// Starting with 0, append i+1
 					temperatureLive.x = [
 						...temperatureLive.x,
 						(temperatureLive.x[temperatureLive.x.length - 1] ?? 0) + 1
 					];
-					if (temperatureLive.y.length > 20) {
+					// Sheft left if there are more than 20 data
+					if (temperatureLive.x.length > 20 || temperatureLive.y.length > 20) {
 						temperatureLive.y = temperatureLive.y.splice(1, temperatureLive.y.length);
 						temperatureLive.x = temperatureLive.x.splice(1, temperatureLive.x.length);
 					}
 					break;
-
-				case 'ilkem/temperature/day':
-					temperatureDay = JSON.parse(payload);
+				case 'ilkem/humidity':
+					parsed = parseFloat(payload);
+					// Append parsed to humidity.y
+					humidityLive.y = [...humidityLive.y, parsed];
+					// Starting with 0, append i+1
+					humidityLive.x = [
+						...humidityLive.x,
+						(humidityLive.x[humidityLive.x.length - 1] ?? 0) + 1
+					];
+					// Sheft left if there are more than 20 data
+					if (humidityLive.x.length > 20 || humidityLive.y.length > 20) {
+						humidityLive.y = humidityLive.y.splice(1, humidityLive.y.length);
+						humidityLive.x = humidityLive.x.splice(1, humidityLive.x.length);
+					}
+					break;
+				case 'ilkem/acceleration':
+					parsed = parseFloat(payload);
+					// Append parsed to acceleration.y
+					accelerationLive.y = [...accelerationLive.y, parsed];
+					// Starting with 0, append i+1
+					accelerationLive.x = [
+						...accelerationLive.x,
+						(accelerationLive.x[accelerationLive.x.length - 1] ?? 0) + 1
+					];
+					// Sheft left if there are more than 20 data
+					if (accelerationLive.x.length > 20 || accelerationLive.y.length > 20) {
+						accelerationLive.y = accelerationLive.y.splice(1, accelerationLive.y.length);
+						accelerationLive.x = accelerationLive.x.splice(1, accelerationLive.x.length);
+					}
 					break;
 
 				case 'ilkem/temperature/warn':
@@ -58,36 +90,12 @@
 					alert(payload);
 					break;
 
-				case 'ilkem/humidity':
-					parsed = parseFloat(payload);
-					humidityLive.y = [...humidityLive.y, parsed];
-					humidityLive.x = [
-						...humidityLive.x,
-						(humidityLive.x[humidityLive.x.length - 1] ?? 0) + 1
-					];
-					if (humidityLive.y.length > 20) {
-						humidityLive.y = humidityLive.y.splice(1, humidityLive.y.length);
-						humidityLive.x = humidityLive.x.splice(1, humidityLive.x.length);
-					}
+				case 'ilkem/temperature/day':
+					temperatureDay = JSON.parse(payload);
 					break;
-
 				case 'ilkem/humidity/day':
 					humidityDay = JSON.parse(payload);
 					break;
-
-				case 'ilkem/acceleration':
-					parsed = parseFloat(payload);
-					accelerationLive.y = [...accelerationLive.y, parsed];
-					accelerationLive.x = [
-						...accelerationLive.x,
-						(accelerationLive.x[accelerationLive.x.length - 1] ?? 0) + 1
-					];
-					if (accelerationLive.y.length > 20) {
-						accelerationLive.y = accelerationLive.y.splice(1, accelerationLive.y.length);
-						accelerationLive.x = accelerationLive.x.splice(1, accelerationLive.x.length);
-					}
-					break;
-
 				case 'ilkem/acceleration/day':
 					accelerationDay = JSON.parse(payload);
 					break;
@@ -96,17 +104,20 @@
 	});
 
 	let dayQuery: string;
-	function onSubmit(query: string) {
-		Mqtt.publish('ilkem/search/day', query);
+	async function onSubmit(query: string) {
+		await Mqtt.publish('ilkem/search/day', query);
 	}
-	$: onSubmit(dayQuery);
+	$: onSubmit(dayQuery); // If dayQuery change, onSubmit is automatically executed
 
-	function onDisarm() {
-		Mqtt.publish('ilkem/disarm', '{}');
+	async function onDisarm() {
+		await Mqtt.publish('ilkem/disarm', '{}');
 	}
 
-	onDestroy(() => {
-		Mqtt.disconnect();
+	// If the page is destroyed, kill the client
+	onDestroy(async () => {
+		if (Mqtt.everConnected) {
+			await Mqtt.disconnect();
+		}
 	});
 </script>
 
