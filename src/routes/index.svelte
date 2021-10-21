@@ -2,8 +2,8 @@
 	import type { DailyData } from '$lib/daily-data';
 	import Chart from '$components/chart.svelte';
 	import { onDestroy, onMount } from 'svelte';
-	import { Client } from '@jdiamond/mqtt-browser';
 	import { Buffer } from 'buffer';
+	import Mqtt from '$lib/mqtt';
 
 	type LiveData = { x: any[]; y: number[] };
 
@@ -24,26 +24,13 @@
 	let accelerationDay: DailyData[] = [];
 	let mqttStatus: string;
 
-	const client = new Client({
-		url: 'ws://192.168.42.231:8000/mqtt', // 4g
-		// url: 'ws://172.16.162.53:8000/mqtt', // school
-		clientId: `web_${Math.random() * 100}`,
-		connectTimeout: 2000,
-		reconnect: {
-			retries: 3
-		},
-		logger: (msg) => {
-			console.log(msg);
-		}
-	});
-
 	onMount(async () => {
-		await client.connect();
+		await Mqtt.connect();
 		mqttStatus = 'Connected.';
-		await client.subscribe('ilkem/#', 2);
+		await Mqtt.subscribe('ilkem/#', 2);
 		mqttStatus = 'Subscribed.';
 
-		client.on('message', (topic: string, message: Buffer) => {
+		Mqtt.on('message', (topic: string, message: Buffer) => {
 			let payload = Buffer.from(message).toString('utf-8');
 			mqttStatus = `Received from '${topic}': ${payload}`;
 			let parsed: any;
@@ -110,16 +97,16 @@
 
 	let dayQuery: string;
 	function onSubmit(query: string) {
-		client.publish('ilkem/search/day', query);
+		Mqtt.publish('ilkem/search/day', query);
 	}
 	$: onSubmit(dayQuery);
 
 	function onDisarm() {
-		client.publish('ilkem/disarm', '{}');
+		Mqtt.publish('ilkem/disarm', '{}');
 	}
 
 	onDestroy(() => {
-		client.disconnect();
+		Mqtt.disconnect();
 	});
 </script>
 
