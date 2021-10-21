@@ -5,17 +5,27 @@
 	import { Client } from '@jdiamond/mqtt-browser';
 	import { Buffer } from 'buffer';
 
-	let temperatureLive: number[] = [];
+	let temperatureLive: { x: any[]; y: number[] } = {
+		x: [],
+		y: []
+	};
 	let temperatureDay: DailyData[] = [];
-	let humidityLive: number[] = [];
+	let humidityLive: { x: any[]; y: number[] } = {
+		x: [],
+		y: []
+	};
 	let humidityDay: DailyData[] = [];
-	let accelerationLive: number[] = [];
+	let accelerationLive: { x: any[]; y: number[] } = {
+		x: [],
+		y: []
+	};
 	let accelerationDay: DailyData[] = [];
 	let loggerStatus: string;
 
 	const client = new Client({
-		url: 'ws://192.168.42.231:8000/mqtt',
-		//clientId: `web_${Math.random() * 100}`,
+		//url: 'ws://192.168.42.231:8000/mqtt', // 4g
+		url: 'ws://172.16.162.53:8000/mqtt', // school
+		clientId: `web_${Math.random() * 100}`,
 		connectTimeout: 2000,
 		reconnect: {
 			retries: 3
@@ -26,39 +36,24 @@
 		}
 	});
 
-	type Packet = { payload: any };
 	onMount(async () => {
 		await client.connect();
-		await Promise.all([
-			client.subscribe('health'),
-			client.subscribe('ilkem/temperature'),
-			client.subscribe('ilkem/temperature/day'),
-			client.subscribe('ilkem/temperature/warn'),
-			client.subscribe('ilkem/humidity'),
-			client.subscribe('ilkem/humidity/day'),
-			client.subscribe('ilkem/humidity/warn'),
-			client.subscribe('ilkem/acceleration'),
-			client.subscribe('ilkem/acceleration/day'),
-			client.subscribe('ilkem/acceleration/warn')
-		]);
+		await client.subscribe('ilkem/#', 2);
 
 		client.on('message', (topic: string, message: Buffer) => {
-			let packet: Packet;
-			try {
-				packet = JSON.parse(Buffer.from(message).toString('utf-8')) as Packet;
-			} catch (e) {
-				console.log(`Message was ${Buffer.from(message).toString('utf-8')}`);
-				console.error(e);
-				return;
-			}
-
-			let payload: any;
+			let payload = Buffer.from(message).toString('utf-8');
+			let parsed: any;
 			switch (topic) {
 				case 'ilkem/temperature':
-					payload = parseFloat(packet.payload);
-					temperatureLive = [...temperatureLive, payload];
-					if (temperatureLive.length > 20) {
-						temperatureLive = temperatureLive.splice(1, temperatureLive.length);
+					parsed = parseFloat(payload);
+					temperatureLive.y = [...temperatureLive.y, parsed];
+					temperatureLive.x = [
+						...temperatureLive.x,
+						(temperatureLive.x[temperatureLive.x.length - 1] ?? 0) + 1
+					];
+					if (temperatureLive.y.length > 20) {
+						temperatureLive.y = temperatureLive.y.splice(1, temperatureLive.y.length);
+						temperatureLive.x = temperatureLive.x.splice(1, temperatureLive.x.length);
 					}
 					break;
 
@@ -68,14 +63,19 @@
 				case 'ilkem/temperature/warn':
 				case 'ilkem/humidty/warn':
 				case 'ilkem/acceleration/warn':
-					alert(packet.payload);
+					alert(payload);
 					break;
 
 				case 'ilkem/humidity':
-					payload = parseFloat(packet.payload);
-					humidityLive = [...humidityLive, payload];
-					if (humidityLive.length > 20) {
-						humidityLive = humidityLive.splice(1, humidityLive.length);
+					parsed = parseFloat(payload);
+					humidityLive.y = [...humidityLive.y, parsed];
+					humidityLive.x = [
+						...humidityLive.x,
+						(humidityLive.x[humidityLive.x.length - 1] ?? 0) + 1
+					];
+					if (humidityLive.y.length > 20) {
+						humidityLive.y = humidityLive.y.splice(1, humidityLive.y.length);
+						humidityLive.x = humidityLive.x.splice(1, humidityLive.x.length);
 					}
 					break;
 
@@ -83,10 +83,15 @@
 					break;
 
 				case 'ilkem/acceleration':
-					payload = parseFloat(packet.payload);
-					accelerationLive = [...accelerationLive, payload];
-					if (accelerationLive.length > 20) {
-						accelerationLive = accelerationLive.splice(1, accelerationLive.length);
+					parsed = parseFloat(payload);
+					accelerationLive.y = [...accelerationLive.y, parsed];
+					accelerationLive.x = [
+						...accelerationLive.x,
+						(accelerationLive.x[accelerationLive.x.length - 1] ?? 0) + 1
+					];
+					if (accelerationLive.y.length > 20) {
+						accelerationLive.y = accelerationLive.y.splice(1, accelerationLive.y.length);
+						accelerationLive.x = accelerationLive.x.splice(1, accelerationLive.x.length);
 					}
 					break;
 
@@ -102,49 +107,70 @@
 	}
 </script>
 
-<h1 style="text-align: center">Mosquitto Websockets</h1>
-
-<div>
-	<div>
+<section class="hero is-success is-fullheight">
+	<p class="title p-4">Mosquitto Websockets</p>
+	<div class="container">
 		Subscribed to
-		<input id="topic" disabled type="text" /> Status:
-		<input id="status" size="80" disabled type="text" bind:value={loggerStatus} />
+		<input class="input" id="topic" disabled type="text" /> Status:
+		<input class="input" id="status" size="80" disabled type="text" bind:value={loggerStatus} />
 	</div>
 
 	<!-- TODO: Flip switch led -->
 
-	<form on:submit|preventDefault={onSubmit}>
-		Date recherchée (YYYY-MM-DD) :
-		<input bind:value={dayQuery} type="text" name="name" />
-		<button type="submit" value="Afficher jour" />
-	</form>
+	<div class="container">
+		<form on:submit|preventDefault={onSubmit}>
+			<label class="label" for="name">Date recherchée</label>
+			<div class="field has-addons">
+				<div class="control">
+					<input
+						class="input"
+						bind:value={dayQuery}
+						type="text"
+						name="name"
+						placeholder="yyyy-MM-dd"
+					/>
+				</div>
+				<div class="control">
+					<button type="submit" class="button is-info"> Afficher jour </button>
+				</div>
+			</div>
+		</form>
+	</div>
 
-	<img src="assets/goutte.png" width="18px" height="27px" alt="Goutte" />
-	<input type="checkbox" class="flipswitch" id="humidite" name="humidite" />
-	<label for="humidite"> Humidité &emsp;</label>
+	<div class="container">
+		<img src="assets/goutte.png" width="18px" height="27px" alt="Goutte" />
+		<input type="checkbox" class="flipswitch" id="humidite" name="humidite" />
+		<label for="humidite"> Humidité &emsp;</label>
 
-	<img src="assets/thermometre.png" width="12px" height="30px" alt="Thermometre" />
-	<input type="checkbox" class="flipswitch" id="temperature" name="temperature" />
-	<label for="temperature"> Temperature </label>
-
-	<ul id="ws" style="font-family: 'Courier New', Courier, monospace">
-		<Chart
-			title="Relevé de température"
-			xLabel="Temps (s)"
-			yLabel="Température (°C)"
-			data={temperatureLive}
-		/>
-		<Chart
-			title="Relevé d'humidité"
-			xLabel="Temps (s)"
-			yLabel="Humidité g/m<sup>3</sup>"
-			data={humidityLive}
-		/>
-		<Chart
-			title="Relevé d'accélération"
-			xLabel="Temps (s)"
-			yLabel="Accélération sur l'axe x du capteur m/s<sup>2</sup>"
-			data={accelerationLive}
-		/>
-	</ul>
-</div>
+		<img src="assets/thermometre.png" width="12px" height="30px" alt="Thermometre" />
+		<input type="checkbox" class="flipswitch" id="temperature" name="temperature" />
+		<label for="temperature"> Temperature </label>
+	</div>
+</section>
+<section class="hero is-primary is-medium">
+	<Chart
+		title="Relevé de température"
+		xLabel="Temps (s)"
+		yLabel="Température (°C)"
+		bind:yData={temperatureLive.y}
+		bind:xData={temperatureLive.x}
+	/>
+</section>
+<section class="hero is-success is-medium">
+	<Chart
+		title="Relevé d'humidité"
+		xLabel="Temps (s)"
+		yLabel="Humidité (%)"
+		bind:xData={humidityLive.x}
+		bind:yData={humidityLive.y}
+	/>
+</section>
+<section class="hero is-info is-medium">
+	<Chart
+		title="Relevé d'accélération"
+		xLabel="Temps (s)"
+		yLabel="Accélération sur l'axe x du capteur cm/s²"
+		bind:xData={accelerationLive.x}
+		bind:yData={accelerationLive.y}
+	/>
+</section>

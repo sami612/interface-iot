@@ -1,31 +1,64 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import type { ChartAPI } from 'c3';
+	import { onDestroy, onMount } from 'svelte';
+	import Chart from 'chart.js/auto';
 
 	export let title: string;
 	export let xLabel: string;
 	export let yLabel: string;
-	export let data: number[];
+	export let yData: number[];
+	export let xData: any[];
 
-	let chart: ChartAPI;
+	let chart: Chart;
+	let chartEl: HTMLElement;
 
+	$: updateGraph(xData, yData);
+
+	function updateGraph(newXData: any[], newYData: number[]) {
+		if (chart?.data?.datasets[0]) {
+			chart.data.labels = newXData;
+			chart.data.datasets[0].data = newYData;
+			chart.update();
+		}
+	}
+
+	// TODO: use chart.js
 	onMount(async () => {
-		const c3 = await import('c3');
-		chart = c3.generate({
-			bindto: '#chart',
+		chart = new Chart(chartEl, {
+			type: 'line',
 			data: {
-				columns: [[title, ...data]]
+				labels: xData,
+				datasets: [
+					{
+						label: title,
+						backgroundColor: 'rgb(255, 99, 132)',
+						borderColor: 'rgb(255, 99, 132)',
+						data: yData
+					}
+				]
 			},
-			axis: {
-				x: {
-					label: xLabel
-				},
-				y: {
-					label: yLabel
+			options: {
+				responsive: true,
+				scales: {
+					x: {
+						title: {
+							display: true,
+							text: xLabel
+						}
+					},
+					y: {
+						title: {
+							display: true,
+							text: yLabel
+						}
+					}
 				}
 			}
 		});
 	});
+
+	onDestroy(() => {
+		chart?.destroy();
+	});
 </script>
 
-<div id="#chart" style="height: 400px; width: 1500px; margin-bottom: 20px" />
+<canvas bind:this={chartEl} style="height: 400px; width: 1500px; margin-bottom: 20px" />

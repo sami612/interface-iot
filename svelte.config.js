@@ -26,7 +26,7 @@ const config = {
 				}
 			},
 			optimizeDeps: {
-				exclude: ['mqtt']
+				exclude: ['c3']
 			}
 		}
 	},
