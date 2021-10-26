@@ -35,7 +35,7 @@
 	let temperatureDay: DailyData[] = [];
 	let humidityDay: DailyData[] = [];
 	let accelerationDay: DailyData[] = [];
-	let mqttStatus: string = '';
+	let mqttStatus: string = 'Not connected.';
 
 	// When the page is fully loaded
 	onMount(async () => {
@@ -113,6 +113,7 @@
 	async function onSubmit(query: string) {
 		if (query) {
 			await Mqtt.publish('ilkem/search/day', query);
+			mqttStatus = `Published to 'ilkem/search/day': ${query}`;
 		}
 	}
 
@@ -121,12 +122,14 @@
 
 	async function onDisarm() {
 		await Mqtt.publish('ilkem/disarm', '{}');
+		mqttStatus = "Published to 'ilkem/disarm'";
 	}
 
 	// If the page is destroyed, kill the client
 	onDestroy(async () => {
 		if (Mqtt.everConnected) {
 			await Mqtt.disconnect();
+			mqttStatus = 'Disconnected.';
 		}
 	});
 </script>
